@@ -9,6 +9,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"sync"
+
 	"github.com/bnb-chain/zkbnb-smt/database"
 	"github.com/bnb-chain/zkbnb-smt/database/memory"
 	"github.com/bnb-chain/zkbnb-smt/metrics"
@@ -18,7 +20,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 	sysMemory "github.com/pbnjay/memory"
 	"github.com/pkg/errors"
-	"sync"
 )
 
 var (
@@ -692,39 +693,11 @@ func (tree *BNBSparseMerkleTree) VerifyProof(key uint64, proof Proof) bool {
 		keyVal = tree.nilHashes.Get(tree.maxDepth)
 	}
 
-	var depth uint8 = 4
-	var helpers = make([]int, 0, tree.maxDepth)
-
-	for i := 0; i < int(tree.maxDepth)/4; i++ {
-		path := key >> (int(tree.maxDepth) - (i+1)*4)
-		nibble := path & 0x000000000000000f
-
-		if i > 0 { // ignore the root node
-			helpers = append(helpers, int(path)/16%2)
-		}
-
-		index := 0
-		for j := 0; j < 3; j++ {
-			// nibble / 8
-			// nibble / 4
-			// nibble / 2
-			inc := int(nibble) / (1 << (3 - j))
-			helpers = append(helpers, inc%2)
-			index += 1 << (j + 1)
-		}
-
-		depth += 4
-	}
-	helpers = append(helpers, int(key)%2)
-	helpers = utils.ReverseInts(helpers)
-	if len(proof) != len(helpers) {
-		return false
-	}
-
+	path := key
 	root := tree.Root()
 	node := keyVal
 	for i := 0; i < len(proof); i++ {
-		switch helpers[i] {
+		switch path & 0x0000000000000001 {
 		case 0:
 			node = tree.hasher.Hash(node, proof[i])
 		case 1:
@@ -732,6 +705,8 @@ func (tree *BNBSparseMerkleTree) VerifyProof(key uint64, proof Proof) bool {
 		default:
 			return false
 		}
+
+		path >>= 1
 	}
 
 	return bytes.Equal(root, node)
