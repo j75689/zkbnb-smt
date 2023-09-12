@@ -5,4 +5,5 @@
 
 package bsmt
 
+// Proof is a proof of inclusion or exclusion of a leaf node in a tree.
 type Proof [][]byte
